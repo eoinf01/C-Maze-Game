@@ -1,18 +1,17 @@
 #include <stdio.h>
 #include "maze_gen.c"
 #include "ncurses.h"
-#define FOG_RANGE 3
 #define FOG_CLEARED '.'
 // print maze with optional message to the ncurses default window
-void printMaze(struct maze newMaze, struct maze *fogMaze, int *potions, char *message, int x, int y)
+void printMaze(struct maze newMaze, struct maze *fogMaze, int *potions, char *message, int x, int y, int fogRadius)
 {
     // clear the default window
     clear();
     printw("Potions: %d\n", *potions);
-    int startRow = x - FOG_RANGE;
-    int endRow = x + FOG_RANGE;
-    int startCol = y - FOG_RANGE;
-    int endCol = y + FOG_RANGE;
+    int startRow = x - fogRadius;
+    int endRow = x + fogRadius;
+    int startCol = y - fogRadius;
+    int endCol = y + fogRadius;
     if (startRow < 0)
     {
         startRow = 0;
@@ -69,12 +68,17 @@ void checkPotion(int x, int y, char **maze, int *potions)
     }
 }
 
-// find the entry point of the generated maze along the left wall
-void findEntry(int *entryX, int *entryY, int *x, int *y, struct maze newMaze, int *potions)
+// find the entry point of the generated maze along the left wall and the exit point of the maze
+void findEntryExit(int *entryX, int *entryY, int *exitX, int *exitY, int *x, int *y, struct maze newMaze, int *potions)
 {
     char **maze = newMaze.a;
     for (int i = 0; i < newMaze.h; i++)
     {
+        if (maze[i][newMaze.w - 1] == ' ')
+        {
+            *exitX = i;
+            *exitY = newMaze.w - 1;
+        }
         if (maze[i][0] == ' ')
         {
             *x = i;
@@ -91,20 +95,6 @@ void findEntry(int *entryX, int *entryY, int *x, int *y, struct maze newMaze, in
     }
     *entryX = *x;
     *entryY = *y;
-}
-
-// find the exit point of the generated maze along the right wall
-void findExit(int *x, int *y, struct maze newMaze)
-{
-    char **maze = newMaze.a;
-    for (int i = 0; i < newMaze.h; i++)
-    {
-        if (maze[i][newMaze.w - 1] == ' ')
-        {
-            *x = i;
-            *y = newMaze.w - 1;
-        }
-    }
 }
 
 // move the player to the new position
@@ -129,20 +119,8 @@ void inputErrorCheck()
 
 int main()
 {
-    int width;
-    int height;
-    int cellSize;
-    int seed;
-    int potions = 0;
-
-    int X = 0;
-    int Y = 0;
-
-    int entryX = 0;
-    int entryY = 0;
-
-    int exitX = 0;
-    int exitY = 0;
+    int width, height, cellSize, seed,fogRadius, potions = 0;
+    int exitX, exitY, entryX, entryY,X,Y;
     int c;
     // get user input
     printf("Width:");
@@ -163,12 +141,19 @@ int main()
         inputErrorCheck();
         printf("Cell Size:");
     }
+    printf("Fog Radius:");
+    while (scanf("%d", &fogRadius) != 1)
+    {
+        inputErrorCheck();
+        printf("Fog Radius:");
+    }
     printf("Random Seed:");
     while (scanf("%d", &seed) != 1)
     {
         inputErrorCheck();
         printf("Random Seed:");
     }
+
 
     // generate the maze
     struct maze newMaze = generate_maze(width, height, cellSize, seed);
@@ -177,14 +162,13 @@ int main()
     char **maze = newMaze.a;
 
     // find the entry and exit points
-    findEntry(&entryX, &entryY, &X, &Y, newMaze, &potions);
-    findExit(&exitX, &exitY, newMaze);
+    findEntryExit(&entryX, &entryY,&exitX, &exitY, &X, &Y, newMaze, &potions);
 
     // start ncurses
     initscr();
     cbreak();
     noecho();
-    printMaze(newMaze, &fogMaze, &potions, NULL, X, Y);
+    printMaze(newMaze, &fogMaze, &potions, NULL, X, Y,fogRadius);
 
     char input = ' ';
     // get user input
@@ -194,54 +178,54 @@ int main()
         switch (input)
         {
         case 'w':
-            if (maze[X - 1][Y] != 'w')
+            if ( X > 0 & maze[X - 1][Y] != 'w')
             {
                 playerMove(X - 1, Y, &X, &Y, newMaze, &potions);
-                printMaze(newMaze, &fogMaze, &potions, NULL, X, Y);
+                printMaze(newMaze, &fogMaze, &potions, NULL, X, Y,fogRadius);
             }
             break;
         case 's':
-            if (maze[X + 1][Y] != 'w')
+            if ( X < newMaze.h -1 & maze[X + 1][Y] != 'w')
             {
                 playerMove(X + 1, Y, &X, &Y, newMaze, &potions);
-                printMaze(newMaze, &fogMaze, &potions, NULL, X, Y);
+                printMaze(newMaze, &fogMaze, &potions, NULL, X, Y,fogRadius);
             }
             break;
         case 'a':
-            if (maze[X][Y - 1] != 'w')
+            if (Y >= 0 & maze[X][Y - 1] != 'w')
             {
 
                 if (X == entryX && (Y - 1) < entryY)
                 {
-                    printMaze(newMaze, &fogMaze, &potions, "Cannot exit through here!", X, Y);
+                    printMaze(newMaze, &fogMaze, &potions, "Cannot exit through here!", X, Y,fogRadius);
                 }
                 else
                 {
                     playerMove(X, Y - 1, &X, &Y, newMaze, &potions);
-                    printMaze(newMaze, &fogMaze, &potions, NULL, X, Y);
+                    printMaze(newMaze, &fogMaze, &potions, NULL, X, Y,fogRadius);
                 }
             }
             break;
         case 'd':
-            if (maze[X][Y + 1] != 'w')
+            if (Y < newMaze.w -1 & maze[X][Y + 1] != 'w')
             {
                 if ((X == exitX && Y + 1 == exitY))
                 {
                     if (potions == 3)
                     {
                         playerMove(X, Y + 1, &X, &Y, newMaze, &potions);
-                        printMaze(newMaze, &fogMaze, &potions, "You have escaped!", X, Y);
+                        printMaze(newMaze, &fogMaze, &potions, "You have escaped!", X, Y,fogRadius);
                         return 0;
                     }
                     else
                     {
-                        printMaze(newMaze, &fogMaze, &potions, "You need all 3 potions to escape!", X, Y);
+                        printMaze(newMaze, &fogMaze, &potions, "You need all 3 potions to escape!", X, Y,fogRadius);
                     }
                 }
                 else
                 {
                     playerMove(X, Y + 1, &X, &Y, newMaze, &potions);
-                    printMaze(newMaze, &fogMaze, &potions, NULL, X, Y);
+                    printMaze(newMaze, &fogMaze, &potions, NULL, X, Y,fogRadius);
                 }
             }
             break;
